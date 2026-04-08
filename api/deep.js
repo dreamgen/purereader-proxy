@@ -1,5 +1,5 @@
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import chromium from '@sparticuz/chromium-min';
 
 export default async function handler(req, res) {
     // 1. 設定 CORS
@@ -21,18 +21,23 @@ export default async function handler(req, res) {
     let browser = null;
 
     try {
-        // 2. 啟動無頭瀏覽器 (Vercel 環境專用配置)
+        // 2. 告訴 Sparticuz 從遠端下載包含 libnss3.so 的完整壓縮包
+        const executablePath = await chromium.executablePath(
+            "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"
+        );
+
+        // 3. 啟動無頭瀏覽器
         browser = await puppeteer.launch({
             args: chromium.args,
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
+            executablePath: executablePath,
             headless: chromium.headless,
             ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
 
-        // 3. 效能優化：不載入圖片、影片、CSS，節省 Vercel 運算時間
+        // 4. 效能優化：不載入圖片、影片、CSS，節省 Vercel 運算時間
         await page.setRequestInterception(true);
         page.on('request', (request) => {
             const resourceType = request.resourceType();
@@ -43,13 +48,13 @@ export default async function handler(req, res) {
             }
         });
 
-        // 4. 前往目標網址，等待 DOM 載入
+        // 5. 前往目標網址，等待 DOM 載入
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
 
-        // 5. 強制等待 1.5 秒，讓 JS 把文章畫出來
+        // 6. 強制等待 1.5 秒，讓 JS 把文章畫出來
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // 6. 獲取渲染後的最終 HTML
+        // 7. 獲取渲染後的最終 HTML
         const html = await page.content();
 
         await browser.close();
