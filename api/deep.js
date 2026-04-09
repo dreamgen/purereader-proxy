@@ -1,10 +1,9 @@
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min';
 
 export default async function handler(req, res) {
     // 1. 設定 CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); 
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
@@ -18,26 +17,19 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: '請提供 url 參數' });
     }
 
+    // BrowserBase 免費版限制：60 分鐘/月、1 concurrent session、每次 session 上限 15 分鐘
+    // 每次請求約用 10 秒，月上限約 360 次請求
     let browser = null;
 
     try {
-        // 2. 告訴 Sparticuz 從遠端下載包含 libnss3.so 的完整壓縮包
-        const executablePath = await chromium.executablePath(
-            "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"
-        );
-
-        // 3. 啟動無頭瀏覽器
-        browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath,
-            headless: chromium.headless,
-            ignoreHTTPSErrors: true,
+        // 2. 連接至 BrowserBase 遠端瀏覽器
+        browser = await puppeteer.connect({
+            browserWSEndpoint: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&projectId=${process.env.BROWSERBASE_PROJECT_ID}`,
         });
 
         const page = await browser.newPage();
 
-        // 4. 效能優化：不載入圖片、影片、CSS，節省 Vercel 運算時間
+        // 3. 效能優化：不載入圖片、影片、CSS，節省 session 用量
         await page.setRequestInterception(true);
         page.on('request', (request) => {
             const resourceType = request.resourceType();
@@ -48,20 +40,20 @@ export default async function handler(req, res) {
             }
         });
 
-        // 5. 前往目標網址，等待 DOM 載入
+        // 4. 前往目標網址，等待 DOM 載入（8 秒上限，避免 session 超時）
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
 
-        // 6. 強制等待 1.5 秒，讓 JS 把文章畫出來
+        // 5. 強制等待 1.5 秒，讓 JS 把文章畫出來
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // 7. 獲取渲染後的最終 HTML
+        // 6. 獲取渲染後的最終 HTML
         const html = await page.content();
-
-        await browser.close();
         res.status(200).send(html);
 
     } catch (error) {
-        if (browser) await browser.close();
         res.status(500).json({ error: `Puppeteer 渲染失敗: ${error.message}` });
+    } finally {
+        // 確保 session 無論成功或失敗都必定關閉，避免消耗免費用量
+        if (browser) await browser.close();
     }
 }
