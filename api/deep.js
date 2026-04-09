@@ -1,10 +1,9 @@
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min';
 
 export default async function handler(req, res) {
     // 1. 設定 CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); 
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
@@ -21,18 +20,9 @@ export default async function handler(req, res) {
     let browser = null;
 
     try {
-        // 2. 告訴 Sparticuz 從遠端下載包含 libnss3.so 的完整壓縮包
-        const executablePath = await chromium.executablePath(
-            "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"
-        );
-
-        // 3. 啟動無頭瀏覽器
-        browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath,
-            headless: chromium.headless,
-            ignoreHTTPSErrors: true,
+        // 2. 連接至 BrowserBase 遠端瀏覽器
+        browser = await puppeteer.connect({
+            browserWSEndpoint: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&projectId=${process.env.BROWSERBASE_PROJECT_ID}`,
         });
 
         const page = await browser.newPage();

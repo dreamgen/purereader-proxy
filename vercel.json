@@ -1,8 +1,8 @@
 {
   "functions": {
     "api/deep.js": {
-      "maxDuration": 10,
-      "memory": 1024
+      "maxDuration": 30,
+      "memory": 256
     }
   }
 }
