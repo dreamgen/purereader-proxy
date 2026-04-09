@@ -29,7 +29,11 @@ export default async function handler(req, res) {
 
         const page = await browser.newPage();
 
-        // 3. 效能優化：不載入圖片、影片、CSS，節省 session 用量
+        // 3. 模擬真實瀏覽器，避免被網站 bot 偵測攔截
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+        await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7' });
+
+        // 4. 效能優化：不載入圖片、影片、CSS，節省 session 用量
         await page.setRequestInterception(true);
         page.on('request', (request) => {
             const resourceType = request.resourceType();
