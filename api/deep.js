@@ -1,5 +1,21 @@
 import puppeteer from 'puppeteer-core';
 
+// 免費版限制：
+//   BrowserBase     — 60 分鐘/月、1 concurrent session
+//   Browserless.io  — 1,000 units/月、每次請求約 10 秒 ≈ 360 次/月
+// 策略：優先使用 BrowserBase，連線失敗時自動切換至 Browserless.io
+async function connectBrowser() {
+    try {
+        return await puppeteer.connect({
+            browserWSEndpoint: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&projectId=${process.env.BROWSERBASE_PROJECT_ID}`,
+        });
+    } catch {
+        return await puppeteer.connect({
+            browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`,
+        });
+    }
+}
+
 export default async function handler(req, res) {
     // 1. 設定 CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -17,15 +33,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: '請提供 url 參數' });
     }
 
-    // BrowserBase 免費版限制：60 分鐘/月、1 concurrent session、每次 session 上限 15 分鐘
-    // 每次請求約用 10 秒，月上限約 360 次請求
     let browser = null;
 
     try {
-        // 2. 連接至 BrowserBase 遠端瀏覽器
-        browser = await puppeteer.connect({
-            browserWSEndpoint: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&projectId=${process.env.BROWSERBASE_PROJECT_ID}`,
-        });
+        // 2. 連接遠端瀏覽器（BrowserBase 優先，失敗自動備援至 Browserless.io）
+        browser = await connectBrowser();
 
         const page = await browser.newPage();
 
@@ -44,13 +56,13 @@ export default async function handler(req, res) {
             }
         });
 
-        // 4. 前往目標網址，等待 DOM 載入（8 秒上限，避免 session 超時）
+        // 5. 前往目標網址，等待 DOM 載入（8 秒上限，避免 session 超時）
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
 
-        // 5. 強制等待 1.5 秒，讓 JS 把文章畫出來
+        // 6. 強制等待 1.5 秒，讓 JS 把文章畫出來
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // 6. 獲取渲染後的最終 HTML
+        // 7. 獲取渲染後的最終 HTML
         const html = await page.content();
         res.status(200).send(html);
 
