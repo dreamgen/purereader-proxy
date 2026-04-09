@@ -3,16 +3,25 @@ import puppeteer from 'puppeteer-core';
 // 免費版限制：
 //   BrowserBase     — 60 分鐘/月、1 concurrent session
 //   Browserless.io  — 1,000 units/月、每次請求約 10 秒 ≈ 360 次/月
-// 策略：優先使用 BrowserBase，連線失敗時自動切換至 Browserless.io
+// 透過環境變數 BROWSER_PRIMARY 控制優先服務（預設：browserbase）
+//   BROWSER_PRIMARY=browserbase   → 優先 BrowserBase，失敗備援 Browserless.io
+//   BROWSER_PRIMARY=browserless   → 優先 Browserless.io，失敗備援 BrowserBase
+const SERVICES = {
+    browserbase: () => puppeteer.connect({
+        browserWSEndpoint: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&projectId=${process.env.BROWSERBASE_PROJECT_ID}`,
+    }),
+    browserless: () => puppeteer.connect({
+        browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`,
+    }),
+};
+
 async function connectBrowser() {
+    const primary = process.env.BROWSER_PRIMARY === 'browserless' ? 'browserless' : 'browserbase';
+    const fallback = primary === 'browserbase' ? 'browserless' : 'browserbase';
     try {
-        return await puppeteer.connect({
-            browserWSEndpoint: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&projectId=${process.env.BROWSERBASE_PROJECT_ID}`,
-        });
+        return await SERVICES[primary]();
     } catch {
-        return await puppeteer.connect({
-            browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`,
-        });
+        return await SERVICES[fallback]();
     }
 }
 
